@@ -1,0 +1,93 @@
+---
+title: "Practical Machine Learning (Course Project)"
+author: "Kiril D. Sakaliyski"
+date: "February 14, 2016"
+output: html_document
+---
+
+## Synopsis
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The five ways, as described in the study, were exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. More information is available from the website http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The goal is by using the gathered data from accelerometers on the belt, forearm, arm, and dumbell of the participants to be able to predict the appropriate activity quality (class A-E).
+
+The final prediction model is to be run on test data to predict the outcome of 20 different test cases.
+
+## Load Packages
+
+```{r,warning=FALSE,message=FALSE}
+library(caret)
+library(MASS)
+```
+
+## Data
+
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+### Data Loading
+
+```{r}
+trainData <- read.csv(url('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'), 
+                      na.strings=c("NA","#DIV/0!",""," "))
+testData <- read.csv(url('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'), 
+                     na.strings=c("NA","#DIV/0!",""," "))
+```
+
+### Data Processing
+
+There are some variables with a lot of $NA$ values. We will remove all covariates that have more than 60% $NA$ values. Also, because of the nature of the variables we would also remove additional seven of the covariates that we consider irrelevant for the activity class prediction. 
+```{r}
+dims <- dim(trainData)
+nas <- sapply(trainData,function(x)sum(is.na(x)))
+trainDF <- trainData[,names(which(nas<0.50*dims[1]))]
+trainDF <- subset(trainDF, select =-c(X,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window,num_window,user_name))
+```
+
+## Machine Learning Evaluation
+
+We were provided with a large training set (19,622 entries) and a small testing set (20 entries). Instead of performing the ML algorithm on the entire training set, we split the training data further into a training set (comprising 75% of the entries) and a testing set (comprising 25% of the entries). This will alow us to test performance of different models.
+
+```{r}
+set.seed(1979)
+ip <- createDataPartition(y=trainDF$classe, p=0.75, list=FALSE)
+trainDFtraining <- trainDF[ip,]
+trainDFtesting <- trainDF[-ip,]
+```
+
+The main ML algorithm of choice is a classification trees. A classification tree searches through each predictor to find a value of a single variable that best splits the data into two groups. Over the course of days, we trained various models (decision trees, glm, etc.) on the training set and validated and compared the models on the testing set. The best accuracy was achieved using a random forest algorithm (as expected) with first centering and scaling the data and applying cross validation. Due to the length constraints only the results of the random forest fit is shown in the report.
+
+```{r,warning=FALSE,message=FALSE}
+modelFit <- train(classe ~ ., method = "rf", preProcess=c("center", "scale"), 
+                  trControl = trainControl(method = "cv", number = 5, returnData = FALSE),
+                  data = trainDFtraining, verbose = FALSE)
+```
+
+Here are the model results.
+```{r}
+print(modelFit, digits = 4)
+```
+
+Now, we run against the testing set in the train data split and display the confusion matrix.
+```{r}
+predictions <- predict(modelFit, newdata = trainDFtesting)
+print(confusionMatrix(predictions, trainDFtesting$classe), digits = 4)
+```
+The observed accuracy is 0.99. Random forests algorithm yielded very good results.
+
+Now, run against the 20 test set.
+```{r}
+print(predict(modelFit, newdata = testData))
+```
+
+Here is the probabilty matrix of the test set by activity class.
+```{r}
+print(predict(modelFit, testData, type = "prob"))
+```
+
+## Conclusion
+
+The best accuracy was achieved using a random forest algorithm with first centering and scaling the data and applying cross validation.
